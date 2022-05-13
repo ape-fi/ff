@@ -1,23 +1,25 @@
-/**
- *Submitted for verification at Etherscan.io on 2021-07-27
-*/
-
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.6;
+pragma solidity ^0.8.6;
 
-interface ibToken {
-    function mint(uint) external returns (uint);
-    function redeemUnderlying(uint) external returns (uint);
+interface IApeFinance {
+    function mint(address minter, uint256 mintAmount)
+        external
+        returns (uint256);
+    function redeem(
+        address payable redeemer,
+        uint256 redeemTokens,
+        uint256 redeemAmount
+    ) external returns (uint256);
     function exchangeRateStored() external view returns (uint);
     function balanceOf(address) external view returns (uint);
 }
 
-contract FixedForex {
-    string public constant name = "Iron Bank KRW";
-    string public constant symbol = "ibKRW";
+contract ApeUSD {
+    string public constant name = "apeUSD";
+    string public constant symbol = "apeUSD";
     uint8 public constant decimals = 18;
 
-    ibToken public immutable ib;
+    IApeFinance public apefi;
     address public gov;
     address public nextgov;
     uint public commitgov;
@@ -25,14 +27,18 @@ contract FixedForex {
 
     uint public liquidity;
 
-    constructor(ibToken _ib) {
-        ib = _ib;
+    constructor() {
         gov = msg.sender;
     }
 
     modifier g() {
         require(msg.sender == gov);
         _;
+    }
+
+    function setApefi(address _apefi) external g {
+        require(address(apefi) == address(0), 'apefi address already set');
+        apefi = IApeFinance(_apefi);
     }
 
     function setGov(address _gov) external g {
@@ -45,20 +51,20 @@ contract FixedForex {
         gov = nextgov;
     }
 
-    function balanceIB() public view returns (uint) {
-        return ib.balanceOf(address(this));
+    function balanceApeFi() public view returns (uint) {
+        return apefi.balanceOf(address(this));
     }
 
     function balanceUnderlying() public view returns (uint) {
-        uint256 _b = balanceIB();
+        uint256 _b = balanceApeFi();
         if (_b > 0) {
-            return _b * ib.exchangeRateStored() / 1e18;
+            return _b * apefi.exchangeRateStored() / 1e18;
         }
         return 0;
     }
 
     function _redeem(uint amount) internal {
-        require(ib.redeemUnderlying(amount) == 0, "ib: withdraw failed");
+        require(apefi.redeem(payable(address(this)), 0, amount) == 0, "apefi: withdraw failed");
     }
 
     function profit() external {
@@ -75,9 +81,9 @@ contract FixedForex {
 
     function deposit() external {
         uint _amount = balances[address(this)];
-        allowances[address(this)][address(ib)] = _amount;
+        allowances[address(this)][address(apefi)] = _amount;
         liquidity += _amount;
-        require(ib.mint(_amount) == 0, "ib: supply failed");
+        require(apefi.mint(address(this), _amount) == 0, "apefi: supply failed");
     }
 
     /// @notice Total number of tokens in circulation
